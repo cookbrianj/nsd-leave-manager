@@ -146,8 +146,8 @@
         </div>
 
         <!-- Navigation Tabs -->
-        <v-card rounded="xl" elevation="2" border class="mb-8 overflow-hidden">
-          <v-tabs v-model="activeTab" bg-color="surface-variant" slider-color="primary" grow>
+        <v-card rounded="xl" elevation="1" border class="mb-8 overflow-hidden">
+          <v-tabs v-model="activeTab" class="border-b" slider-color="primary" grow>
             <!-- Available to All -->
             <v-tab value="request" class="font-weight-bold text-body-2">
               <v-icon start>mdi-calendar-edit</v-icon>
@@ -175,6 +175,21 @@
               Leave Types
             </v-tab>
 
+            <v-tab v-if="user.role === 'districtAdmin'" value="buildings" class="font-weight-bold text-body-2">
+              <v-icon start>mdi-domain-plus</v-icon>
+              Buildings
+            </v-tab>
+
+            <v-tab v-if="user.role === 'districtAdmin'" value="staff" class="font-weight-bold text-body-2">
+              <v-icon start>mdi-account-cog</v-icon>
+              Staff
+            </v-tab>
+
+            <v-tab v-if="user.role === 'districtAdmin'" value="admin-requests" class="font-weight-bold text-body-2">
+              <v-icon start>mdi-account-tie</v-icon>
+              Admin Requests
+            </v-tab>
+
             <v-tab v-if="user.role === 'districtAdmin'" value="district-report" class="font-weight-bold text-body-2">
               <v-icon start>mdi-chart-line</v-icon>
               District Report
@@ -200,6 +215,18 @@
             <LeaveTypeManager />
           </v-window-item>
 
+          <v-window-item value="buildings">
+            <BuildingManager />
+          </v-window-item>
+
+          <v-window-item value="staff">
+            <StaffManager />
+          </v-window-item>
+
+          <v-window-item value="admin-requests">
+            <DistrictReviewDashboard />
+          </v-window-item>
+
           <v-window-item value="district-report">
             <DistrictReportDashboard />
           </v-window-item>
@@ -218,6 +245,9 @@ import LeaveTypeManager from '@/components/LeaveTypeManager.vue'
 import EmployeeRequestForm from '@/components/EmployeeRequestForm.vue'
 import BuildingAdminDashboard from '@/components/BuildingAdminDashboard.vue'
 import DistrictReportDashboard from '@/components/DistrictReportDashboard.vue'
+import BuildingManager from '@/components/BuildingManager.vue'
+import DistrictReviewDashboard from '@/components/DistrictReviewDashboard.vue'
+import StaffManager from '@/components/StaffManager.vue'
 
 const { user: authUser, loading, error, login, logout } = useAuth()
 
@@ -272,22 +302,22 @@ function simulateRole(role) {
 
 <style scoped>
 .app-background {
-  background-color: #0f1117 !important;
+  background-color: #f8fafc !important;
 }
 
 .glass-card {
-  background: rgba(26, 29, 39, 0.8) !important;
+  background: rgba(255, 255, 255, 0.9) !important;
   backdrop-filter: blur(12px);
-  border: 1px solid rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(0, 0, 0, 0.08);
 }
 
 .logo-circle {
   width: 80px;
   height: 80px;
   border-radius: 50%;
-  background: rgba(108, 140, 255, 0.1);
+  background: rgba(229, 168, 35, 0.1);
   display: flex;
-  align-center: center;
+  align-items: center;
   justify-content: center;
 }
 

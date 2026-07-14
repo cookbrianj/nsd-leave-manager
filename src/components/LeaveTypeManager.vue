@@ -1,9 +1,9 @@
 <template>
-  <v-card class="mx-auto my-6" max-width="1000" elevation="4" rounded="xl" border>
-    <v-card-item class="bg-surface-variant pa-6">
+  <v-card class="mx-auto my-6" max-width="1000" elevation="1" rounded="xl" border>
+    <v-card-item class="pa-6 border-b">
       <div class="d-flex align-center justify-space-between">
         <div>
-          <v-card-title class="text-h5 font-weight-bold d-flex align-center gap-2">
+          <v-card-title class="text-h5 font-weight-bold d-flex align-center gap-2 text-slate-900">
             <v-icon color="secondary" class="mr-2">mdi-cog-outline</v-icon>
             Leave Type Manager
           </v-card-title>

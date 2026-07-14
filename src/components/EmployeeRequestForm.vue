@@ -3,9 +3,9 @@
     <v-row>
       <!-- Request Form Column -->
       <v-col cols="12" md="5">
-        <v-card class="elevation-4 rounded-xl border" height="100%">
-          <v-card-item class="bg-surface-variant pa-6">
-            <v-card-title class="text-h5 font-weight-bold d-flex align-center">
+        <v-card class="elevation-1 rounded-xl border" height="100%">
+          <v-card-item class="pa-6 border-b">
+            <v-card-title class="text-h5 font-weight-bold d-flex align-center text-slate-900">
               <v-icon color="primary" class="mr-2">mdi-calendar-edit</v-icon>
               Request Leave
             </v-card-title>
@@ -75,7 +75,7 @@
 
           <v-divider />
 
-          <v-card-actions class="pa-6 bg-surface-variant d-flex justify-end">
+          <v-card-actions class="pa-6 d-flex justify-end">
             <v-btn
               variant="outlined"
               color="secondary"
@@ -103,9 +103,9 @@
 
       <!-- History Column -->
       <v-col cols="12" md="7">
-        <v-card class="elevation-4 rounded-xl border" height="100%">
-          <v-card-item class="bg-surface-variant pa-6">
-            <v-card-title class="text-h5 font-weight-bold d-flex align-center">
+        <v-card class="elevation-1 rounded-xl border" height="100%">
+          <v-card-item class="pa-6 border-b">
+            <v-card-title class="text-h5 font-weight-bold d-flex align-center text-slate-900">
               <v-icon color="secondary" class="mr-2">mdi-history</v-icon>
               Your Leave History
             </v-card-title>
@@ -318,6 +318,9 @@ async function submitRequest() {
   try {
     const requestDoc = {
       uid: user.value.uid,
+      employeeName: `${user.value.firstName || ''} ${user.value.lastName || ''}`.trim() || 'Employee',
+      employeeEmail: user.value.email,
+      employeeRole: user.value.role || 'employee',
       buildingId: user.value.buildingId || 'default',
       leaveTypeId: form.value.selectedType.typeId,
       leaveTypeName: form.value.selectedType.name,

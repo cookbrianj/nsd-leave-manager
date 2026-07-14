@@ -36,9 +36,14 @@ service cloud.firestore {
       return get(/databases/$(database)/documents/users/$(request.auth.token.email)).data;
     }
 
+    // Returns true if the user document exists in Firestore.
+    function userExists() {
+      return exists(/databases/$(database)/documents/users/$(request.auth.token.email));
+    }
+
     // Returns true when the caller has the specified role.
     function hasRole(role) {
-      return isAllowedDomain() && callerDoc().role == role;
+      return isAllowedDomain() && userExists() && callerDoc().role == role;
     }
 
     // Returns true when the caller is a District Admin.
@@ -91,9 +96,29 @@ service cloud.firestore {
           isAdminForBuilding(resource.data.buildingId)
         );
 
-      // Only District Admins can create or update user records
-      // (e.g. CSV import, role assignment).
-      allow create, update: if isDistrictAdmin();
+      // Only District Admins can manage roles/other users.
+      // Users can create their own document on first sign in if role is 'employee'.
+      allow create: if isAllowedDomain() &&
+        (
+          isDistrictAdmin() ||
+          (
+            request.auth.token.email == emailId &&
+            request.resource.data.role == 'employee' &&
+            request.resource.data.uid == request.auth.uid
+          )
+        );
+
+      // Only District Admins can update roles/buildings.
+      // Users can update their own details (like linking UID) but NOT their role or building.
+      allow update: if isAllowedDomain() &&
+        (
+          isDistrictAdmin() ||
+          (
+            request.auth.token.email == emailId &&
+            request.resource.data.role == resource.data.role &&
+            request.resource.data.buildingId == resource.data.buildingId
+          )
+        );
 
       // Deletion restricted to District Admins.
       allow delete: if isDistrictAdmin();

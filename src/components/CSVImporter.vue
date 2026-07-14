@@ -1,9 +1,9 @@
 <template>
-  <v-card class="mx-auto my-6" max-width="900" elevation="4" rounded="xl" border>
-    <v-card-item class="bg-surface-variant pa-6">
+  <v-card class="mx-auto my-6" max-width="900" elevation="1" rounded="xl" border>
+    <v-card-item class="pa-6 border-b">
       <div class="d-flex align-center justify-between">
         <div>
-          <v-card-title class="text-h5 font-weight-bold d-flex align-center gap-2">
+          <v-card-title class="text-h5 font-weight-bold d-flex align-center gap-2 text-slate-900">
             <v-icon color="primary" class="mr-2">mdi-database-import</v-icon>
             Bulk User Importer
           </v-card-title>
@@ -144,7 +144,7 @@
 
     <!-- Actions -->
     <v-divider />
-    <v-card-actions class="pa-6 bg-surface-variant d-flex justify-end gap-2">
+    <v-card-actions class="pa-6 d-flex justify-end gap-2">
       <v-btn
         variant="outlined"
         color="secondary"

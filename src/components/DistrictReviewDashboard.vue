@@ -288,15 +288,8 @@ const approvedCount = computed(() => {
 let unsubscribe = null
 
 onMounted(() => {
-  // Sync request logs matching this building
-  watch(() => user.value?.buildingId, (newBuildingId) => {
-    if (newBuildingId) {
-      syncRequests(newBuildingId)
-    } else {
-      allRequests.value = []
-      isLoading.value = false
-    }
-  }, { immediate: true })
+  // Sync all request logs for the district globally, then filter for building admins
+  syncAdminRequests()
 })
 
 onUnmounted(() => {
@@ -304,21 +297,21 @@ onUnmounted(() => {
 })
 
 // Real-time synchronization
-function syncRequests(buildingId) {
+function syncAdminRequests() {
   isLoading.value = true
   if (unsubscribe) unsubscribe()
 
+  // District Admins have permission to query the entire collection
   const q = query(
     collection(db, 'leaveRequests'),
-    where('buildingId', '==', buildingId),
     orderBy('timestamp', 'desc')
   )
 
   unsubscribe = onSnapshot(q, async (snap) => {
-    // Filter out requests submitted by Building Admins, as they go to District Admins
+    // Filter to ONLY include requests submitted by Building Admins
     const rawRequests = snap.docs
       .map(doc => ({ id: doc.id, ...doc.data() }))
-      .filter(r => r.employeeRole !== 'admin')
+      .filter(r => r.employeeRole === 'admin')
 
     // Filter uids that don't have employeeName on the request document to fetch from cache (legacy support)
     const uidsToResolve = rawRequests

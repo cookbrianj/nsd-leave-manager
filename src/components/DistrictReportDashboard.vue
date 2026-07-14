@@ -107,8 +107,8 @@
     </v-row>
 
     <!-- Global Requests Table -->
-    <v-card class="rounded-xl border overflow-hidden" elevation="4">
-      <v-card-title class="bg-surface-variant pa-4 text-h6 font-weight-bold">
+    <v-card class="rounded-xl border overflow-hidden" elevation="1">
+      <v-card-title class="pa-4 text-h6 font-weight-bold border-b text-slate-900">
         District Leave Records
       </v-card-title>
       
@@ -275,16 +275,22 @@ onMounted(async () => {
       ...doc.data()
     }))
 
-    // Batch resolve employee details
-    const uniqueUids = [...new Set(rawRequests.map(r => r.uid))]
-    await resolveEmployeeDetails(uniqueUids)
+    // Filter uids that don't have employeeName on the request document to fetch from cache (legacy support)
+    const uidsToResolve = rawRequests
+      .filter(r => !r.employeeName || !r.employeeEmail)
+      .map(r => r.uid)
+    
+    if (uidsToResolve.length > 0) {
+      const uniqueUids = [...new Set(uidsToResolve)]
+      await resolveEmployeeDetails(uniqueUids)
+    }
 
     allRequests.value = rawRequests.map(r => {
-      const details = employeeDetailsCache.value[r.uid] || { name: 'Unknown User', email: 'N/A' }
+      const cached = employeeDetailsCache.value[r.uid] || { name: 'Unknown User', email: 'N/A' }
       return {
         ...r,
-        employeeName: details.name,
-        employeeEmail: details.email
+        employeeName: r.employeeName || cached.name,
+        employeeEmail: r.employeeEmail || cached.email
       }
     })
 

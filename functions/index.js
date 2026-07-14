@@ -93,33 +93,46 @@ exports.onRequestCreated = onDocumentCreated("leaveRequests/{requestId}", async 
   }
 
   const requestData = snapshot.data();
-  const { uid, buildingId, leaveTypeName, startDate, endDate, reason } = requestData;
+  const { uid, buildingId, leaveTypeName, startDate, endDate, reason, employeeRole } = requestData;
 
   logger.info(`New request created: ${event.params.requestId} for user ${uid} in building ${buildingId}`);
 
   try {
-    // 1. Fetch building details to find adminUids
-    const buildingRef = db.collection("buildings").doc(buildingId);
-    const buildingDoc = await buildingRef.get();
+    let targetEmails = [];
 
-    if (!buildingDoc.exists) {
-      logger.warn(`Building doc ${buildingId} does not exist. Cannot route notification.`);
-      return;
-    }
+    if (employeeRole === 'admin') {
+      // 1. Route to District Admins instead of Building Admins
+      const districtAdminQuery = await db.collection("users").where("role", "==", "districtAdmin").get();
+      targetEmails = districtAdminQuery.docs.map(doc => doc.id); // Email is the doc ID
+      
+      if (!targetEmails.length) {
+        logger.warn("No District Admins found to route building admin leave request.");
+        return;
+      }
+    } else {
+      // 1. Fetch building details to find adminUids
+      const buildingRef = db.collection("buildings").doc(buildingId);
+      const buildingDoc = await buildingRef.get();
 
-    const buildingData = buildingDoc.data();
-    const adminUids = buildingData.adminUids || [];
+      if (!buildingDoc.exists) {
+        logger.warn(`Building doc ${buildingId} does not exist. Cannot route notification.`);
+        return;
+      }
 
-    if (!adminUids.length) {
-      logger.warn(`No Building Admins assigned to building ${buildingId}.`);
-      return;
-    }
+      const buildingData = buildingDoc.data();
+      const adminUids = buildingData.adminUids || [];
 
-    // 2. Fetch admin email addresses
-    const adminEmails = await getEmailsForUids(adminUids);
-    if (!adminEmails.length) {
-      logger.warn(`No active admin user records found for UIDs: ${adminUids.join(", ")}`);
-      return;
+      if (!adminUids.length) {
+        logger.warn(`No Building Admins assigned to building ${buildingId}.`);
+        return;
+      }
+
+      // 2. Fetch admin email addresses
+      targetEmails = await getEmailsForUids(adminUids);
+      if (!targetEmails.length) {
+        logger.warn(`No active admin user records found for UIDs: ${adminUids.join(", ")}`);
+        return;
+      }
     }
 
     // 3. Fetch requesting employee name & email
@@ -169,13 +182,13 @@ Please log into the NSD Leave Entry portal to approve or deny this request.
 
     await transporter.sendMail({
       from: mailFrom,
-      to: adminEmails.join(", "),
+      to: targetEmails.join(", "),
       subject,
       text: textContent,
       html: htmlContent,
     });
 
-    logger.info(`Successfully sent pending notifications to admins: ${adminEmails.join(", ")}`);
+    logger.info(`Successfully sent pending notifications to target emails: ${targetEmails.join(", ")}`);
   } catch (err) {
     logger.error("Error processing onRequestCreated trigger:", err);
   }
