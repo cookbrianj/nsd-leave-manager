@@ -1,0 +1,171 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ─────────────────────────────────────────────────────────────
+    // Helper functions
+    // ─────────────────────────────────────────────────────────────
+
+    // Returns true when the caller is signed-in.
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    // Returns true when the caller's email is on the @neoshosd.org domain
+    // OR is in the explicit allow-list of external emails.
+    function isAllowedDomain() {
+      return isSignedIn() &&
+        (
+          request.auth.token.email.matches('.*@neoshosd\\.org$') ||
+          request.auth.token.email in [
+            // ── External allow-list ──
+            // Add any non-@neoshosd.org emails that should have access below.
+            // Example: 'external.consultant@gmail.com',
+          ]
+        );
+    }
+
+    // Shorthand: the caller's UID
+    function callerUid() {
+      return request.auth.uid;
+    }
+
+    // Returns the user document for the calling user.
+    function callerDoc() {
+      return get(/databases/$(database)/documents/users/$(request.auth.token.email)).data;
+    }
+
+    // Returns true when the caller has the specified role.
+    function hasRole(role) {
+      return isAllowedDomain() && callerDoc().role == role;
+    }
+
+    // Returns true when the caller is a District Admin.
+    function isDistrictAdmin() {
+      return hasRole('districtAdmin');
+    }
+
+    // Returns true when the caller is a Building Admin.
+    function isBuildingAdmin() {
+      return hasRole('admin');
+    }
+
+    // Returns true when the caller is a Building Assistant.
+    function isBuildingAssistant() {
+      return hasRole('assistant');
+    }
+
+    // Returns the building document for a given buildingId.
+    function buildingDoc(buildingId) {
+      return get(/databases/$(database)/documents/buildings/$(buildingId)).data;
+    }
+
+    // Returns true when the caller's UID is in the adminUids array
+    // of the building document matching the given buildingId.
+    function isAdminForBuilding(buildingId) {
+      return isAllowedDomain() &&
+        callerUid() in buildingDoc(buildingId).adminUids;
+    }
+
+    // Returns true when the caller's UID is in the assistantUids array
+    // of the building document matching the given buildingId.
+    function isAssistantForBuilding(buildingId) {
+      return isAllowedDomain() &&
+        callerUid() in buildingDoc(buildingId).assistantUids;
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // USERS collection
+    // ─────────────────────────────────────────────────────────────
+    match /users/{emailId} {
+      // Any authenticated + allowed-domain user can read their own doc.
+      // Building Admins can read users in their building.
+      // District Admins can read any user document.
+      allow read: if isAllowedDomain() &&
+        (
+          request.auth.token.email == emailId ||
+          isDistrictAdmin() ||
+          (isBuildingAdmin() && callerDoc().buildingId == resource.data.buildingId) ||
+          // Admins assigned to the user's building via the buildings collection
+          isAdminForBuilding(resource.data.buildingId)
+        );
+
+      // Only District Admins can create or update user records
+      // (e.g. CSV import, role assignment).
+      allow create, update: if isDistrictAdmin();
+
+      // Deletion restricted to District Admins.
+      allow delete: if isDistrictAdmin();
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // BUILDINGS collection
+    // ─────────────────────────────────────────────────────────────
+    match /buildings/{buildingId} {
+      // Any authenticated allowed-domain user can read buildings
+      // (needed for dropdowns, lookups, etc.).
+      allow read: if isAllowedDomain();
+
+      // Only District Admins can manage building records.
+      allow create, update, delete: if isDistrictAdmin();
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // LEAVE TYPES collection
+    // ─────────────────────────────────────────────────────────────
+    match /leaveTypes/{typeId} {
+      // Any authenticated allowed-domain user can read leave types
+      // (employees need this for the request form dropdown).
+      allow read: if isAllowedDomain();
+
+      // Only District Admins can manage leave types.
+      allow create, update, delete: if isDistrictAdmin();
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // LEAVE REQUESTS collection
+    // ─────────────────────────────────────────────────────────────
+    match /leaveRequests/{requestId} {
+      // Read access:
+      //   - Employees can read their own requests.
+      //   - Building Admins can read requests for their building.
+      //   - Building Assistants can read requests for their building.
+      //   - District Admins can read all requests.
+      allow read: if isAllowedDomain() &&
+        (
+          callerUid() == resource.data.uid ||
+          isDistrictAdmin() ||
+          isAdminForBuilding(resource.data.buildingId) ||
+          isAssistantForBuilding(resource.data.buildingId)
+        );
+
+      // Create: Any allowed-domain user can create a leave request,
+      // but only for themselves (uid must match).
+      allow create: if isAllowedDomain() &&
+        request.resource.data.uid == callerUid() &&
+        request.resource.data.status == 'pending' &&
+        request.resource.data.keys().hasAll([
+          'uid', 'leaveTypeId', 'leaveTypeName',
+          'startDate', 'endDate', 'status', 'timestamp', 'buildingId'
+        ]);
+
+      // Update: Only Building Admins (for their building) or
+      // District Admins can update (approve/deny) a request.
+      // Employees cannot modify their own requests after submission.
+      allow update: if isAllowedDomain() &&
+        (
+          isDistrictAdmin() ||
+          isAdminForBuilding(resource.data.buildingId)
+        ) &&
+        // Only allow changing status and related approval metadata
+        request.resource.data.uid == resource.data.uid &&
+        request.resource.data.leaveTypeId == resource.data.leaveTypeId &&
+        request.resource.data.startDate == resource.data.startDate &&
+        request.resource.data.endDate == resource.data.endDate;
+
+      // Delete: Only District Admins can delete leave requests.
+      allow delete: if isDistrictAdmin();
+    }
+  }
+}
