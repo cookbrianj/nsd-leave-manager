@@ -389,11 +389,6 @@ async function saveStaff() {
       
       // Update document
       await setDoc(userRef, payload, { merge: true })
-
-      // Sync building configurations if role/building changed and user has a uid
-      if (existing.uid && (existing.role !== payload.role || existing.buildingId !== payload.buildingId)) {
-        await syncUserBuildingAccess(existing.uid, existing.buildingId, existing.role, payload.buildingId, payload.role)
-      }
       
       showSnackbar('Staff member updated successfully')
     } else {
@@ -426,11 +421,6 @@ async function deleteStaff() {
 
   try {
     await deleteDoc(doc(db, 'users', item.email))
-    
-    // Sync building configurations to remove their UID
-    if (item.uid) {
-      await syncUserBuildingAccess(item.uid, item.buildingId, item.role, 'default', 'employee')
-    }
 
     showSnackbar('Staff member deleted successfully')
     deleteDialog.value.show = false
@@ -442,57 +432,7 @@ async function deleteStaff() {
   }
 }
 
-/**
- * Helper to update building records to add/remove UIDs from adminUids/assistantUids arrays.
- */
-import { getDoc } from 'firebase/firestore'
-async function syncUserBuildingAccess(uid, oldBuildingId, oldRole, newBuildingId, newRole) {
-  try {
-    // 1. Remove from old building arrays
-    if (oldBuildingId && oldBuildingId !== 'default') {
-      const oldBuildingRef = doc(db, 'buildings', oldBuildingId)
-      const oldBuildingSnap = await getDoc(oldBuildingRef)
-      if (oldBuildingSnap.exists()) {
-        const data = oldBuildingSnap.data()
-        const updates = {}
-        if (oldRole === 'admin') {
-          updates.adminUids = (data.adminUids || []).filter(id => id !== uid)
-        } else if (oldRole === 'assistant') {
-          updates.assistantUids = (data.assistantUids || []).filter(id => id !== uid)
-        }
-        if (Object.keys(updates).length > 0) {
-          await updateDoc(oldBuildingRef, updates)
-        }
-      }
-    }
 
-    // 2. Add to new building arrays
-    if (newBuildingId && newBuildingId !== 'default') {
-      const newBuildingRef = doc(db, 'buildings', newBuildingId)
-      const newBuildingSnap = await getDoc(newBuildingRef)
-      if (newBuildingSnap.exists()) {
-        const data = newBuildingSnap.data()
-        const updates = {}
-        if (newRole === 'admin') {
-          const admins = data.adminUids || []
-          if (!admins.includes(uid)) {
-            updates.adminUids = [...admins, uid]
-          }
-        } else if (newRole === 'assistant') {
-          const assistants = data.assistantUids || []
-          if (!assistants.includes(uid)) {
-            updates.assistantUids = [...assistants, uid]
-          }
-        }
-        if (Object.keys(updates).length > 0) {
-          await updateDoc(newBuildingRef, updates)
-        }
-      }
-    }
-  } catch (err) {
-    console.error('Error syncing user building arrays:', err)
-  }
-}
 </script>
 
 <style scoped>

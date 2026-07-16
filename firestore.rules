@@ -56,28 +56,21 @@ service cloud.firestore {
       return hasRole('admin');
     }
 
-    // Returns true when the caller is a Building Assistant.
-    function isBuildingAssistant() {
-      return hasRole('assistant');
-    }
 
-    // Returns the building document for a given buildingId.
-    function buildingDoc(buildingId) {
-      return get(/databases/$(database)/documents/buildings/$(buildingId)).data;
-    }
-
-    // Returns true when the caller's UID is in the adminUids array
-    // of the building document matching the given buildingId.
+    // Returns true when the caller is a Building Admin for the given buildingId.
     function isAdminForBuilding(buildingId) {
       return isAllowedDomain() &&
-        callerUid() in buildingDoc(buildingId).adminUids;
+        userExists() &&
+        callerDoc().role == 'admin' &&
+        callerDoc().buildingId == buildingId;
     }
 
-    // Returns true when the caller's UID is in the assistantUids array
-    // of the building document matching the given buildingId.
+    // Returns true when the caller is a Building Assistant for the given buildingId.
     function isAssistantForBuilding(buildingId) {
       return isAllowedDomain() &&
-        callerUid() in buildingDoc(buildingId).assistantUids;
+        userExists() &&
+        callerDoc().role == 'assistant' &&
+        callerDoc().buildingId == buildingId;
     }
 
     // ─────────────────────────────────────────────────────────────

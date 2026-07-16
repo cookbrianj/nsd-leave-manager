@@ -1,6 +1,7 @@
 {
   "projects": {
-    "leaveentry": "nsd-leave-entry"
+    "leaveentry": "nsd-leave-entry",
+    "default": "nsd-leave-entry"
   },
   "targets": {},
   "etags": {}

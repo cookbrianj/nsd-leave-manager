@@ -110,27 +110,16 @@ exports.onRequestCreated = onDocumentCreated("leaveRequests/{requestId}", async 
         return;
       }
     } else {
-      // 1. Fetch building details to find adminUids
-      const buildingRef = db.collection("buildings").doc(buildingId);
-      const buildingDoc = await buildingRef.get();
+      // 1. Fetch admin email addresses for this building directly from users collection
+      const adminsQuery = await db.collection("users")
+        .where("buildingId", "==", buildingId)
+        .where("role", "==", "admin")
+        .get();
+      
+      targetEmails = adminsQuery.docs.map(doc => doc.id); // Email is the doc ID
 
-      if (!buildingDoc.exists) {
-        logger.warn(`Building doc ${buildingId} does not exist. Cannot route notification.`);
-        return;
-      }
-
-      const buildingData = buildingDoc.data();
-      const adminUids = buildingData.adminUids || [];
-
-      if (!adminUids.length) {
-        logger.warn(`No Building Admins assigned to building ${buildingId}.`);
-        return;
-      }
-
-      // 2. Fetch admin email addresses
-      targetEmails = await getEmailsForUids(adminUids);
       if (!targetEmails.length) {
-        logger.warn(`No active admin user records found for UIDs: ${adminUids.join(", ")}`);
+        logger.warn(`No Building Admins assigned to building ${buildingId} in users collection.`);
         return;
       }
     }
@@ -232,10 +221,12 @@ exports.onRequestUpdated = onDocumentUpdated("leaveRequests/{requestId}", async 
     // APPROVED STATUS
     // ─────────────────────────────────────────────────────────────
     if (status === "approved") {
-      // 1a. Fetch Assistant emails for the building
-      const buildingDoc = await db.collection("buildings").doc(buildingId).get();
-      const assistantUids = buildingDoc.exists ? (buildingDoc.data().assistantUids || []) : [];
-      const assistantEmails = await getEmailsForUids(assistantUids);
+      // 1a. Fetch Assistant emails for the building directly from users collection
+      const assistantsQuery = await db.collection("users")
+        .where("buildingId", "==", buildingId)
+        .where("role", "==", "assistant")
+        .get();
+      const assistantEmails = assistantsQuery.docs.map(doc => doc.id);
 
       // 1b. Email Employee
       const empSubject = `[NSD Leave Entry] Leave Request Approved!`;

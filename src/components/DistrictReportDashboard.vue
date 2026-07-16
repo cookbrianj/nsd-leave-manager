@@ -137,8 +137,11 @@
         <template #[`item.dates`]="{ item }">
           <div class="text-body-2 font-weight-medium">
             {{ formatDate(item.startDate) }}
-            <span class="mx-1 text-disabled">to</span>
-            {{ formatDate(item.endDate) }}
+            <span class="mx-1 text-disabled" v-if="item.startDate !== item.endDate">to</span>
+            <span v-if="item.startDate !== item.endDate">{{ formatDate(item.endDate) }}</span>
+          </div>
+          <div v-if="item.isHalfDay" class="text-caption text-secondary font-weight-bold">
+            Half-Day ({{ item.halfDayPeriod }})
           </div>
         </template>
 
@@ -151,6 +154,19 @@
           >
             {{ item.status }}
           </v-chip>
+        </template>
+
+        <!-- Decision Details Column -->
+        <template #[`item.decisionInfo`]="{ item }">
+          <div v-if="item.status !== 'pending'">
+            <div class="font-weight-bold">{{ item.reviewerName || item.reviewerEmail || 'Admin' }}</div>
+            <div class="text-caption text-medium-emphasis" v-if="item.updatedAt">
+              {{ formatDateTime(item.updatedAt) }}
+            </div>
+          </div>
+          <span v-else-if="item.status === 'pending'" class="text-caption text-disabled italic">
+            Awaiting Review
+          </span>
         </template>
       </v-data-table>
     </v-card>
@@ -201,7 +217,8 @@ const headers = [
   { title: 'Building', key: 'building', align: 'start', sortable: true, width: '130px' },
   { title: 'Category', key: 'leaveTypeName', align: 'start', sortable: true, width: '150px' },
   { title: 'Leave Dates', key: 'dates', align: 'start', sortable: true, width: '220px' },
-  { title: 'Status', key: 'status', align: 'center', sortable: true, width: '120px' }
+  { title: 'Status', key: 'status', align: 'center', sortable: true, width: '120px' },
+  { title: 'Admin User', key: 'decisionInfo', align: 'start', sortable: true, width: '200px' }
 ]
 
 // Toast updates
@@ -347,6 +364,18 @@ function formatDate(dateStr) {
   })
 }
 
+function formatDateTime(timestamp) {
+  if (!timestamp) return ''
+  const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp)
+  return date.toLocaleString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit'
+  })
+}
+
 // Export parsed CSV report using PapaParse
 function exportToCSV() {
   const exportData = filteredRequests.value.map(req => ({
@@ -356,6 +385,8 @@ function exportToCSV() {
     'Leave Category': req.leaveTypeName,
     'Start Date': req.startDate,
     'End Date': req.endDate,
+    'Is Half-Day': req.isHalfDay ? 'Yes' : 'No',
+    'Half-Day Period': req.isHalfDay ? req.halfDayPeriod : '',
     'Status': req.status.toUpperCase(),
     'Employee Comment': req.reason || '',
     'Admin Comment': req.reviewerNote || ''

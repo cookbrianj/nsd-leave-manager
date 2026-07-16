@@ -154,14 +154,34 @@
               Request Leave
             </v-tab>
 
-            <!-- Building Admins / Assistants -->
+            <!-- Building Admins: Pending Approval -->
             <v-tab
-              v-if="user.role === 'admin' || user.role === 'assistant'"
-              value="building-review"
+              v-if="user.role === 'admin'"
+              value="building-pending"
+              class="font-weight-bold text-body-2"
+            >
+              <v-icon start>mdi-clipboard-check-outline</v-icon>
+              Pending Approval
+            </v-tab>
+
+            <!-- Building Admins: Leave History -->
+            <v-tab
+              v-if="user.role === 'admin'"
+              value="building-history"
+              class="font-weight-bold text-body-2"
+            >
+              <v-icon start>mdi-history</v-icon>
+              Leave History
+            </v-tab>
+
+            <!-- Building Assistants: Building Log -->
+            <v-tab
+              v-if="user.role === 'assistant'"
+              value="building-log"
               class="font-weight-bold text-body-2"
             >
               <v-icon start>mdi-domain</v-icon>
-              {{ user.role === 'admin' ? 'Review Requests' : 'Building Log' }}
+              Building Log
             </v-tab>
 
             <!-- District Admin Tools -->
@@ -203,8 +223,16 @@
             <EmployeeRequestForm />
           </v-window-item>
 
-          <v-window-item value="building-review">
-            <BuildingAdminDashboard />
+          <v-window-item value="building-pending">
+            <BuildingAdminDashboard mode="pending" />
+          </v-window-item>
+
+          <v-window-item value="building-history">
+            <BuildingAdminDashboard mode="history" />
+          </v-window-item>
+
+          <v-window-item value="building-log">
+            <BuildingAdminDashboard mode="history" />
           </v-window-item>
 
           <v-window-item value="importer">

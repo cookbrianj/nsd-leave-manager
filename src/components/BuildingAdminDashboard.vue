@@ -1,7 +1,7 @@
 <template>
   <v-container class="pa-0">
     <!-- Summary Header Cards -->
-    <v-row class="mb-4">
+    <v-row class="mb-4" v-if="mode === 'history'">
       <v-col cols="12" sm="4">
         <v-card class="pa-4 rounded-xl border text-center" color="surface">
           <div class="text-caption text-medium-emphasis mb-1">Pending Action</div>
@@ -25,129 +25,146 @@
       </v-col>
     </v-row>
 
-    <!-- Main Tabs -->
+    <!-- Main Content Card -->
     <v-card rounded="xl" elevation="1" border class="overflow-hidden">
-      <v-tabs v-model="tab" class="border-b" slider-color="primary">
-        <v-tab value="pending" class="font-weight-bold text-slate-900">
-          Pending Approval ({{ pendingRequests.length }})
-        </v-tab>
-        <v-tab value="history" class="font-weight-bold text-slate-900">
-          Historical Log ({{ processedRequests.length }})
-        </v-tab>
-      </v-tabs>
+      <!-- PENDING REQUESTS VIEW (mode === 'pending') -->
+      <v-data-table
+        v-if="mode === 'pending'"
+        :headers="headers"
+        :items="pendingRequests"
+        :loading="isLoading"
+        loading-text="Syncing pending requests..."
+        no-data-text="No pending leave requests for this building."
+        density="comfortable"
+      >
+        <!-- Employee Column -->
+        <template #[`item.employee`]="{ item }">
+          <div class="font-weight-bold">{{ item.employeeName }}</div>
+          <div class="text-caption text-medium-emphasis">{{ item.employeeEmail }}</div>
+        </template>
 
-      <v-window v-model="tab">
-        <!-- PENDING REQUESTS -->
-        <v-window-item value="pending">
-          <v-data-table
-            :headers="headers"
-            :items="pendingRequests"
-            :loading="isLoading"
-            loading-text="Syncing pending requests..."
-            no-data-text="No pending leave requests for this building."
-            density="comfortable"
+        <!-- Leave Type -->
+        <template #[`item.leaveTypeName`]="{ item }">
+          <v-chip size="small" color="secondary" variant="tonal" class="font-weight-bold">
+            {{ item.leaveTypeName }}
+          </v-chip>
+        </template>
+
+        <!-- Date Range -->
+        <template #[`item.dates`]="{ item }">
+          <div>{{ formatDate(item.startDate) }}</div>
+          <div class="text-caption text-medium-emphasis" v-if="item.startDate !== item.endDate">to {{ formatDate(item.endDate) }}</div>
+          <div v-if="item.isHalfDay" class="text-caption text-secondary font-weight-bold">
+            Half-Day ({{ item.halfDayPeriod }})
+          </div>
+        </template>
+
+        <!-- Reason Column -->
+        <template #[`item.reason`]="{ item }">
+          <span class="text-body-2 italic">{{ item.reason || 'No reason specified' }}</span>
+        </template>
+
+        <!-- Actions Column -->
+        <template #[`item.actions`]="{ item }">
+          <div v-if="isAssistant" class="text-caption text-disabled italic">
+            Read-only (Assistant)
+          </div>
+          <div v-else class="d-flex gap-2 justify-end">
+            <v-btn
+              color="success"
+              variant="flat"
+              size="small"
+              rounded="pill"
+              prepend-icon="mdi-check"
+              @click="openActionDialog(item, 'approved')"
+            >
+              Approve
+            </v-btn>
+            <v-btn
+              color="error"
+              variant="outlined"
+              size="small"
+              rounded="pill"
+              prepend-icon="mdi-close"
+              @click="openActionDialog(item, 'denied')"
+            >
+              Deny
+            </v-btn>
+          </div>
+        </template>
+      </v-data-table>
+
+      <!-- HISTORICAL LOG / LEAVE HISTORY VIEW (mode === 'history') -->
+      <v-data-table
+        v-else
+        :headers="historyHeaders"
+        :items="allRequests"
+        :loading="isLoading"
+        loading-text="Syncing history..."
+        no-data-text="No requests found for this building."
+        density="comfortable"
+      >
+        <!-- Employee -->
+        <template #[`item.employee`]="{ item }">
+          <div class="font-weight-bold">{{ item.employeeName }}</div>
+          <div class="text-caption text-medium-emphasis">{{ item.employeeEmail }}</div>
+        </template>
+
+        <!-- Leave Type -->
+        <template #[`item.leaveTypeName`]="{ item }">
+          <v-chip size="small" color="secondary" variant="tonal" class="font-weight-bold">
+            {{ item.leaveTypeName }}
+          </v-chip>
+        </template>
+
+        <!-- Date Range -->
+        <template #[`item.dates`]="{ item }">
+          <div>{{ formatDate(item.startDate) }}</div>
+          <div class="text-caption text-medium-emphasis" v-if="item.startDate !== item.endDate">to {{ formatDate(item.endDate) }}</div>
+          <div v-if="item.isHalfDay" class="text-caption text-secondary font-weight-bold">
+            Half-Day ({{ item.halfDayPeriod }})
+          </div>
+        </template>
+
+        <!-- Status Chip -->
+        <template #[`item.status`]="{ item }">
+          <v-chip
+            :color="STATUS_CONFIG[item.status]?.color || 'grey'"
+            size="small"
+            class="font-weight-bold text-uppercase"
+            prepend-icon="mdi-circle-medium"
           >
-            <!-- Employee Column -->
-            <template #[`item.employee`]="{ item }">
-              <div class="font-weight-bold">{{ item.employeeName }}</div>
-              <div class="text-caption text-medium-emphasis">{{ item.employeeEmail }}</div>
-            </template>
+            {{ STATUS_CONFIG[item.status]?.label || item.status }}
+          </v-chip>
+        </template>
 
-            <!-- Leave Type -->
-            <template #[`item.leaveTypeName`]="{ item }">
-              <v-chip size="small" color="secondary" variant="tonal" class="font-weight-bold">
-                {{ item.leaveTypeName }}
-              </v-chip>
-            </template>
+        <!-- Decision Details Column -->
+        <template #[`item.decisionInfo`]="{ item }">
+          <div v-if="item.status !== 'pending'">
+            <div class="font-weight-bold">{{ item.reviewerName || item.reviewerEmail || 'Admin' }}</div>
+            <div class="text-caption text-medium-emphasis" v-if="item.updatedAt">
+              {{ formatDateTime(item.updatedAt) }}
+            </div>
+          </div>
+          <span v-else-if="item.status === 'pending'" class="text-caption text-disabled italic">
+            Awaiting Review
+          </span>
+        </template>
 
-            <!-- Date Range -->
-            <template #[`item.dates`]="{ item }">
-              <div>{{ formatDate(item.startDate) }}</div>
-              <div class="text-caption text-medium-emphasis">to {{ formatDate(item.endDate) }}</div>
-            </template>
-
-            <!-- Reason Column -->
-            <template #[`item.reason`]="{ item }">
-              <span class="text-body-2 italic">{{ item.reason || 'No reason specified' }}</span>
-            </template>
-
-            <!-- Actions Column -->
-            <template #[`item.actions`]="{ item }">
-              <div v-if="isAssistant" class="text-caption text-disabled italic">
-                Read-only (Assistant)
-              </div>
-              <div v-else class="d-flex gap-2 justify-end">
-                <v-btn
-                  color="success"
-                  variant="flat"
-                  size="small"
-                  rounded="pill"
-                  prepend-icon="mdi-check"
-                  @click="openActionDialog(item, 'approved')"
-                >
-                  Approve
-                </v-btn>
-                <v-btn
-                  color="error"
-                  variant="outlined"
-                  size="small"
-                  rounded="pill"
-                  prepend-icon="mdi-close"
-                  @click="openActionDialog(item, 'denied')"
-                >
-                  Deny
-                </v-btn>
-              </div>
-            </template>
-          </v-data-table>
-        </v-window-item>
-
-        <!-- HISTORICAL LOG -->
-        <v-window-item value="history">
-          <v-data-table
-            :headers="historyHeaders"
-            :items="processedRequests"
-            :loading="isLoading"
-            loading-text="Syncing history..."
-            no-data-text="No past requests found for this building."
-            density="comfortable"
-          >
-            <!-- Employee -->
-            <template #[`item.employee`]="{ item }">
-              <div class="font-weight-bold">{{ item.employeeName }}</div>
-              <div class="text-caption text-medium-emphasis">{{ item.employeeEmail }}</div>
-            </template>
-
-            <!-- Date Range -->
-            <template #[`item.dates`]="{ item }">
-              <div>{{ formatDate(item.startDate) }}</div>
-              <div class="text-caption text-medium-emphasis">to {{ formatDate(item.endDate) }}</div>
-            </template>
-
-            <!-- Status Chip -->
-            <template #[`item.status`]="{ item }">
-              <v-chip
-                :color="STATUS_CONFIG[item.status]?.color || 'grey'"
-                size="small"
-                class="font-weight-bold text-uppercase"
-                prepend-icon="mdi-circle-medium"
-              >
-                {{ STATUS_CONFIG[item.status]?.label || item.status }}
-              </v-chip>
-            </template>
-
-            <!-- Details Notes -->
-            <template #[`item.notes`]="{ item }">
-              <div v-if="item.reason" class="text-caption text-medium-emphasis">
-                <strong>Reason:</strong> {{ item.reason }}
-              </div>
-              <div v-if="item.reviewerNote" class="text-caption text-info mt-1">
-                <strong>Decision Note:</strong> {{ item.reviewerNote }}
-              </div>
-            </template>
-          </v-data-table>
-        </v-window-item>
-      </v-window>
+        <!-- Details Notes -->
+        <template #[`item.notes`]="{ item }">
+          <div v-if="item.reason" class="text-caption text-medium-emphasis">
+            <strong>Reason:</strong> {{ item.reason }}
+          </div>
+          <div v-if="item.reviewerNote" class="text-caption text-info mt-1">
+            <strong>Decision Note:</strong> {{ item.reviewerNote }}
+          </div>
+          <div v-if="item.reviewerName || item.reviewerEmail" class="text-caption text-grey-darken-1 mt-1">
+            <strong>Decision by:</strong> {{ item.reviewerName || item.reviewerEmail }}
+            <span v-if="item.updatedAt"> on {{ formatDateTime(item.updatedAt) }}</span>
+          </div>
+        </template>
+      </v-data-table>
     </v-card>
 
     <!-- Review Dialog (Approve or Deny action details) -->
@@ -208,25 +225,29 @@
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import {
   collection,
-  doc,
   query,
   where,
   orderBy,
   onSnapshot,
   updateDoc,
-  serverTimestamp,
-  getDocs
+  serverTimestamp
 } from 'firebase/firestore'
 import { db } from '@/firebase'
 import { useAuth } from '@/composables/useAuth'
 import { STATUS_CONFIG } from '@/models'
+
+const props = defineProps({
+  mode: {
+    type: String,
+    default: 'pending' // 'pending' or 'history'
+  }
+})
 
 const { user } = useAuth()
 
 // Building Assistant check (Assistant can view historical data but cannot review)
 const isAssistant = computed(() => user.value?.role === 'assistant')
 
-const tab = ref('pending')
 const allRequests = ref([])
 const employeeDetailsCache = ref({}) // Maps uid -> { name, email }
 const isLoading = ref(true)
@@ -246,6 +267,7 @@ const historyHeaders = [
   { title: 'Leave Category', key: 'leaveTypeName', align: 'start', sortable: true, width: '160px' },
   { title: 'Requested Dates', key: 'dates', align: 'start', sortable: true, width: '160px' },
   { title: 'Status', key: 'status', align: 'center', sortable: true, width: '130px' },
+  { title: 'Admin User', key: 'decisionInfo', align: 'start', sortable: true, width: '200px' },
   { title: 'Notes & Comments', key: 'notes', align: 'start', sortable: false }
 ]
 
@@ -387,6 +409,18 @@ function formatDate(dateStr) {
   })
 }
 
+function formatDateTime(timestamp) {
+  if (!timestamp) return ''
+  const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp)
+  return date.toLocaleString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit'
+  })
+}
+
 // Dialog options
 function openActionDialog(item, status) {
   actionDialog.value = {
@@ -417,6 +451,8 @@ async function submitReview() {
     await updateDoc(docRef, {
       status,
       reviewerUid: user.value.uid,
+      reviewerName: `${user.value.firstName || ''} ${user.value.lastName || ''}`.trim() || user.value.email,
+      reviewerEmail: user.value.email,
       reviewerNote: note.trim(),
       updatedAt: serverTimestamp()
     })

@@ -63,7 +63,10 @@
             <!-- Date Range -->
             <template #[`item.dates`]="{ item }">
               <div>{{ formatDate(item.startDate) }}</div>
-              <div class="text-caption text-medium-emphasis">to {{ formatDate(item.endDate) }}</div>
+              <div class="text-caption text-medium-emphasis" v-if="item.startDate !== item.endDate">to {{ formatDate(item.endDate) }}</div>
+              <div v-if="item.isHalfDay" class="text-caption text-secondary font-weight-bold">
+                Half-Day ({{ item.halfDayPeriod }})
+              </div>
             </template>
 
             <!-- Reason Column -->
@@ -121,7 +124,10 @@
             <!-- Date Range -->
             <template #[`item.dates`]="{ item }">
               <div>{{ formatDate(item.startDate) }}</div>
-              <div class="text-caption text-medium-emphasis">to {{ formatDate(item.endDate) }}</div>
+              <div class="text-caption text-medium-emphasis" v-if="item.startDate !== item.endDate">to {{ formatDate(item.endDate) }}</div>
+              <div v-if="item.isHalfDay" class="text-caption text-secondary font-weight-bold">
+                Half-Day ({{ item.halfDayPeriod }})
+              </div>
             </template>
 
             <!-- Status Chip -->
@@ -136,6 +142,19 @@
               </v-chip>
             </template>
 
+            <!-- Decision Details Column -->
+            <template #[`item.decisionInfo`]="{ item }">
+              <div v-if="item.status !== 'pending'">
+                <div class="font-weight-bold">{{ item.reviewerName || item.reviewerEmail || 'Admin' }}</div>
+                <div class="text-caption text-medium-emphasis" v-if="item.updatedAt">
+                  {{ formatDateTime(item.updatedAt) }}
+                </div>
+              </div>
+              <span v-else-if="item.status === 'pending'" class="text-caption text-disabled italic">
+                Awaiting Review
+              </span>
+            </template>
+
             <!-- Details Notes -->
             <template #[`item.notes`]="{ item }">
               <div v-if="item.reason" class="text-caption text-medium-emphasis">
@@ -143,6 +162,10 @@
               </div>
               <div v-if="item.reviewerNote" class="text-caption text-info mt-1">
                 <strong>Decision Note:</strong> {{ item.reviewerNote }}
+              </div>
+              <div v-if="item.reviewerName || item.reviewerEmail" class="text-caption text-grey-darken-1 mt-1">
+                <strong>Decision by:</strong> {{ item.reviewerName || item.reviewerEmail }}
+                <span v-if="item.updatedAt"> on {{ formatDateTime(item.updatedAt) }}</span>
               </div>
             </template>
           </v-data-table>
@@ -246,6 +269,7 @@ const historyHeaders = [
   { title: 'Leave Category', key: 'leaveTypeName', align: 'start', sortable: true, width: '160px' },
   { title: 'Requested Dates', key: 'dates', align: 'start', sortable: true, width: '160px' },
   { title: 'Status', key: 'status', align: 'center', sortable: true, width: '130px' },
+  { title: 'Admin User', key: 'decisionInfo', align: 'start', sortable: true, width: '200px' },
   { title: 'Notes & Comments', key: 'notes', align: 'start', sortable: false }
 ]
 
@@ -380,6 +404,18 @@ function formatDate(dateStr) {
   })
 }
 
+function formatDateTime(timestamp) {
+  if (!timestamp) return ''
+  const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp)
+  return date.toLocaleString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit'
+  })
+}
+
 // Dialog options
 function openActionDialog(item, status) {
   actionDialog.value = {
@@ -410,6 +446,8 @@ async function submitReview() {
     await updateDoc(docRef, {
       status,
       reviewerUid: user.value.uid,
+      reviewerName: `${user.value.firstName || ''} ${user.value.lastName || ''}`.trim() || user.value.email,
+      reviewerEmail: user.value.email,
       reviewerNote: note.trim(),
       updatedAt: serverTimestamp()
     })

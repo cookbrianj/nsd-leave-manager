@@ -45,8 +45,33 @@
                 required
               />
 
+              <!-- Half-Day Option -->
+              <v-checkbox
+                v-model="form.isHalfDay"
+                label="Is this a half-day request?"
+                color="primary"
+                hide-details
+                class="mt-n2 mb-2"
+              />
+
+              <v-expand-transition>
+                <div v-if="form.isHalfDay">
+                  <v-radio-group
+                    v-model="form.halfDayPeriod"
+                    inline
+                    label="Select Half-Day Period"
+                    class="mb-4"
+                    :rules="[v => !form.isHalfDay || !!v || 'Select AM or PM']"
+                  >
+                    <v-radio label="AM (Morning)" value="AM" />
+                    <v-radio label="PM (Afternoon)" value="PM" />
+                  </v-radio-group>
+                </div>
+              </v-expand-transition>
+
               <!-- End Date -->
               <v-text-field
+                v-if="!form.isHalfDay"
                 v-model="form.endDate"
                 label="End Date *"
                 type="date"
@@ -128,8 +153,11 @@
               <template #[`item.dates`]="{ item }">
                 <div class="font-weight-bold">
                   {{ formatDate(item.startDate) }}
-                  <span class="text-medium-emphasis mx-1">to</span>
-                  {{ formatDate(item.endDate) }}
+                  <span class="text-medium-emphasis mx-1" v-if="item.startDate !== item.endDate">to</span>
+                  <span v-if="item.startDate !== item.endDate">{{ formatDate(item.endDate) }}</span>
+                </div>
+                <div v-if="item.isHalfDay" class="text-caption text-secondary font-weight-bold">
+                  Half-Day ({{ item.halfDayPeriod }})
                 </div>
               </template>
 
@@ -143,6 +171,19 @@
                 >
                   {{ STATUS_CONFIG[item.status]?.label || item.status }}
                 </v-chip>
+              </template>
+
+              <!-- Decision Details Column -->
+              <template #[`item.decisionInfo`]="{ item }">
+                <div v-if="item.status !== 'pending'">
+                  <div class="font-weight-bold">{{ item.reviewerName || item.reviewerEmail || 'Admin' }}</div>
+                  <div class="text-caption text-medium-emphasis" v-if="item.updatedAt">
+                    {{ formatDateTime(item.updatedAt) }}
+                  </div>
+                </div>
+                <span v-else-if="item.status === 'pending'" class="text-caption text-disabled italic">
+                  Awaiting Review
+                </span>
               </template>
 
               <!-- Reason and Reviewer Note Column -->
@@ -207,7 +248,9 @@ const form = ref({
   selectedType: null,
   startDate: '',
   endDate: '',
-  reason: ''
+  reason: '',
+  isHalfDay: false,
+  halfDayPeriod: 'AM'
 })
 
 // Toast alerts
@@ -223,6 +266,7 @@ const historyHeaders = [
   { title: 'Type', key: 'leaveTypeName', align: 'start', sortable: true, width: '150px' },
   { title: 'Date Range', key: 'dates', align: 'start', sortable: true, width: '220px' },
   { title: 'Status', key: 'status', align: 'center', sortable: true, width: '120px' },
+  { title: 'Admin User', key: 'decisionInfo', align: 'start', sortable: true, width: '200px' },
   { title: 'Details & Notes', key: 'notes', align: 'start', sortable: false }
 ]
 
@@ -299,6 +343,25 @@ function formatDate(dateStr) {
   })
 }
 
+function formatDateTime(timestamp) {
+  if (!timestamp) return ''
+  const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp)
+  return date.toLocaleString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit'
+  })
+}
+
+// Automatically sync endDate to startDate if isHalfDay is checked
+watch(() => [form.value.isHalfDay, form.value.startDate], ([isHalf, start]) => {
+  if (isHalf && start) {
+    form.value.endDate = start
+  }
+})
+
 // Reset form
 function resetForm() {
   if (formRef.value) formRef.value.reset()
@@ -306,7 +369,9 @@ function resetForm() {
     selectedType: null,
     startDate: '',
     endDate: '',
-    reason: ''
+    reason: '',
+    isHalfDay: false,
+    halfDayPeriod: 'AM'
   }
 }
 
@@ -325,7 +390,9 @@ async function submitRequest() {
       leaveTypeId: form.value.selectedType.typeId,
       leaveTypeName: form.value.selectedType.name,
       startDate: form.value.startDate,
-      endDate: form.value.endDate,
+      endDate: form.value.isHalfDay ? form.value.startDate : form.value.endDate,
+      isHalfDay: !!form.value.isHalfDay,
+      halfDayPeriod: form.value.isHalfDay ? form.value.halfDayPeriod : null,
       status: 'pending',
       reason: form.value.reason.trim(),
       timestamp: serverTimestamp()

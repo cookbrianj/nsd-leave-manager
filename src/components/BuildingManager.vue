@@ -27,10 +27,10 @@
               <v-card-text class="pa-4">
                 <!-- Admins Selection -->
                 <v-autocomplete
-                  v-model="building.adminUids"
+                  v-model="building.adminEmails"
                   :items="allUsers"
                   item-title="displayName"
-                  item-value="uid"
+                  item-value="email"
                   label="Building Admins"
                   multiple
                   chips
@@ -42,16 +42,20 @@
                   @update:model-value="markDirty(building.id)"
                 >
                   <template #item="{ props, item }">
-                    <v-list-item v-bind="props" :subtitle="item.raw.email" />
+                    <v-list-item v-bind="props" :subtitle="item.raw.email">
+                      <template #append v-if="!item.raw.uid">
+                        <v-chip size="x-small" color="warning" variant="tonal" class="ml-2">Unregistered</v-chip>
+                      </template>
+                    </v-list-item>
                   </template>
                 </v-autocomplete>
 
                 <!-- Assistants Selection -->
                 <v-autocomplete
-                  v-model="building.assistantUids"
+                  v-model="building.assistantEmails"
                   :items="allUsers"
                   item-title="displayName"
-                  item-value="uid"
+                  item-value="email"
                   label="Building Assistants"
                   multiple
                   chips
@@ -62,7 +66,11 @@
                   @update:model-value="markDirty(building.id)"
                 >
                   <template #item="{ props, item }">
-                    <v-list-item v-bind="props" :subtitle="item.raw.email" />
+                    <v-list-item v-bind="props" :subtitle="item.raw.email">
+                      <template #append v-if="!item.raw.uid">
+                        <v-chip size="x-small" color="warning" variant="tonal" class="ml-2">Unregistered</v-chip>
+                      </template>
+                    </v-list-item>
                   </template>
                 </v-autocomplete>
               </v-card-text>
@@ -128,10 +136,11 @@
 
 <script setup>
 import { ref, onMounted, onUnmounted } from 'vue'
-import { collection, query, onSnapshot, doc, getDocs, updateDoc, setDoc } from 'firebase/firestore'
+import { collection, query, onSnapshot, doc, updateDoc, setDoc } from 'firebase/firestore'
 import { db } from '@/firebase'
 
 const buildings = ref([])
+const rawBuildings = ref([])
 const allUsers = ref([])
 const isLoading = ref(true)
 
@@ -144,20 +153,40 @@ const newBuilding = ref({ id: '', name: '' })
 
 const snackbar = ref({ show: false, text: '', color: 'success' })
 let unsubscribeBuildings = null
+let unsubscribeUsers = null
 
-onMounted(async () => {
-  await fetchUsers()
-  
+onMounted(() => {
+  // Real-time listener for users
+  const usersQuery = query(collection(db, 'users'))
+  unsubscribeUsers = onSnapshot(usersQuery, (snap) => {
+    allUsers.value = snap.docs.map(doc => {
+      const data = doc.data()
+      return {
+        email: doc.id,
+        uid: data.uid,
+        firstName: data.firstName || '',
+        lastName: data.lastName || '',
+        displayName: `${data.firstName || ''} ${data.lastName || ''}`.trim() || doc.id,
+        role: data.role || 'employee',
+        buildingId: data.buildingId || 'default'
+      }
+    })
+    
+    calculateBuildingAssignments()
+  }, (err) => {
+    console.error('Error fetching users:', err)
+    showSnackbar('Failed to load users list', 'error')
+  })
+
   // Real-time listener for buildings
-  const q = query(collection(db, 'buildings'))
-  unsubscribeBuildings = onSnapshot(q, (snap) => {
-    buildings.value = snap.docs.map(doc => ({
+  const buildingsQuery = query(collection(db, 'buildings'))
+  unsubscribeBuildings = onSnapshot(buildingsQuery, (snap) => {
+    rawBuildings.value = snap.docs.map(doc => ({
       id: doc.id,
-      ...doc.data(),
-      // Ensure arrays exist
-      adminUids: doc.data().adminUids || [],
-      assistantUids: doc.data().assistantUids || []
+      ...doc.data()
     }))
+    
+    calculateBuildingAssignments()
     isLoading.value = false
   }, (err) => {
     console.error('Error fetching buildings:', err)
@@ -168,27 +197,34 @@ onMounted(async () => {
 
 onUnmounted(() => {
   if (unsubscribeBuildings) unsubscribeBuildings()
+  if (unsubscribeUsers) unsubscribeUsers()
 })
 
-async function fetchUsers() {
-  try {
-    const snap = await getDocs(collection(db, 'users'))
-    allUsers.value = snap.docs.map(doc => {
-      const data = doc.data()
-      return {
-        email: doc.id, // User doc id is the email
-        uid: data.uid,
-        firstName: data.firstName || '',
-        lastName: data.lastName || '',
-        displayName: `${data.firstName || ''} ${data.lastName || ''}`.trim() || data.email,
-        role: data.role || 'employee',
-        buildingId: data.buildingId || 'default'
-      }
-    }).filter(u => u.uid) // Only include users who have logged in (have a uid)
-  } catch (err) {
-    console.error('Error fetching users:', err)
-    showSnackbar('Failed to fetch user list for assignments', 'error')
-  }
+function calculateBuildingAssignments() {
+  if (rawBuildings.value.length === 0) return
+
+  buildings.value = rawBuildings.value.map(building => {
+    // If this building has unsaved edits, preserve its local state
+    const existing = buildings.value.find(b => b.id === building.id)
+    if (existing && dirtyFlags.value[building.id]) {
+      return existing
+    }
+
+    const adminEmails = allUsers.value
+      .filter(u => u.buildingId === building.id && u.role === 'admin')
+      .map(u => u.email)
+
+    const assistantEmails = allUsers.value
+      .filter(u => u.buildingId === building.id && u.role === 'assistant')
+      .map(u => u.email)
+
+    return {
+      id: building.id,
+      buildingName: building.buildingName,
+      adminEmails,
+      assistantEmails
+    }
+  })
 }
 
 function markDirty(buildingId) {
@@ -211,9 +247,7 @@ async function submitNewBuilding() {
   try {
     const buildingRef = doc(db, 'buildings', newBuilding.value.id)
     await setDoc(buildingRef, {
-      buildingName: newBuilding.value.name,
-      adminUids: [],
-      assistantUids: []
+      buildingName: newBuilding.value.name
     })
     showSnackbar('Building created successfully')
     showAddDialog.value = false
@@ -228,17 +262,6 @@ async function submitNewBuilding() {
 async function saveBuilding(building) {
   isSaving.value[building.id] = true
   try {
-    // 1. Update the building document
-    const buildingRef = doc(db, 'buildings', building.id)
-    await updateDoc(buildingRef, {
-      adminUids: building.adminUids,
-      assistantUids: building.assistantUids
-    })
-
-    // 2. Sync user roles and buildingIds in the users collection
-    // Fetch users again to ensure we have the latest state before modifying
-    await fetchUsers()
-    
     const updatePromises = []
     
     for (const user of allUsers.value) {
@@ -246,8 +269,8 @@ async function saveBuilding(building) {
       let newRole = user.role
       let newBuildingId = user.buildingId
 
-      const isNowAdmin = building.adminUids.includes(user.uid)
-      const isNowAssistant = building.assistantUids.includes(user.uid)
+      const isNowAdmin = building.adminEmails.includes(user.email)
+      const isNowAssistant = building.assistantEmails.includes(user.email)
 
       if (isNowAdmin) {
         if (user.role !== 'admin' || user.buildingId !== building.id) {
